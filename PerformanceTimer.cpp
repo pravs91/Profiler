@@ -1,5 +1,5 @@
 /*
- * myTimer.cpp
+ * PerformanceTimer.cpp
  *
  *  Created on: Mar 19, 2014
  *      Author: pravs
@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <unistd.h>
-
+#include <fcntl.h>
 using namespace std;
 
 typedef struct timer_T{
@@ -29,7 +29,7 @@ typedef struct timer_T{
 	struct timer_T* nestedHead;
 	struct timer_T* nestedTail;
 	struct timer_T* nestedNext;
-	
+
 	double inclusiveTime;
 	timer_T(){
 		flop = memOps = time_in_sec = time_in_ms = 0;
@@ -91,7 +91,49 @@ public:
 		totalTime = 0;
 	}
 public:
+	
+	void start(string timerName,string parent){
 
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		if(timerIter != timers.end()){
+			timers[timerName].start();
+			timers[timerName].stopFlag = false;
+		}
+		else{
+			timer_T* temp = new timer_T();
+			temp -> name = timerName;
+			timers[timerName] = *temp;
+			if(parent.compare("")==0){//if parent is empty string, add timer to root (1st level)
+				if(root->nestedHead == NULL){//first timer added to root
+					root->nestedHead = &timers[timerName];
+					root->nestedTail = &timers[timerName];
+					timers[timerName].prev = root;
+				}
+				else{//add timers to tail of root
+					root->nestedTail->nestedNext = &timers[timerName];
+					root->nestedTail = &timers[timerName];
+					timers[timerName].prev = root;
+				}
+				numberOfTimers++;
+				timers[timerName].start();
+				return;
+			}
+			timers[parent].next = &timers[timerName];
+			timers[timerName].prev = &timers[parent];
+			if(timers[parent].nestedHead == NULL){
+				timers[parent].nestedHead = &timers[timerName];
+				timers[parent].nestedTail = &timers[timerName];
+			}
+			else{
+				timers[parent].nestedTail->nestedNext = &timers[timerName];
+				timers[parent].nestedTail = &timers[timerName];
+			}
+			numberOfTimers++;
+			timers[timerName].start();		
+		}
+		
+	}
 	void start(string timerName){
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
@@ -158,11 +200,11 @@ public:
 			}				
 			timers[timerName].stop();
 			timer_T* current = &timers[timerName];//current = timer to stop
-			timer_T* nested = timers[timerName].next;
+		/*	timer_T* nested = timers[timerName].next;
 			while(nested != NULL && !nested->stopFlag){//stop all nested timers
 				nested->stop();
 				nested = nested->next;
-			}
+			}*/
 			if(current != NULL && current -> prev != NULL)//update next pointer of parent timer to NULL
 				current->prev->next = NULL;
 		}
@@ -207,25 +249,118 @@ public:
 		timers[timerName].calcBW = true;
 		timers[timerName].computeBW();
 	}
-
-	void printReport(){
-		DFSprint(root);
-	}
-	void printReport(string timerName){
-		std::map<string,timer_T>::iterator timerIter;
-		timerIter = timers.find(timerName);
-		DFSprint(&timerIter->second);
-	}
-	
 	void insertTab(int count){
 		int i;
 		for(i = 0;i < count; i++)
 			cout<<"-----";
 	}	
+
+	void insertSlashT(int count,int fd){
+		int i;
+		for(i=0;i<count;i++)
+			write(fd,"----",4);
+	}
+	void printReport(){
+		DFSprint(root);
+	}
+
+	void printReport(string timerName){
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		if(timerIter != timers.end())
+			DFSprint(&timerIter->second);
+		else
+			cout << "Undefined timer '" << timerName << "'" << endl;
+	}
 	
+	void printConcise(string timerName,char* fileName){
+		int fd;
+		if(fileName == NULL)
+			fd = STDOUT_FILENO;
+		else
+			fd = open(fileName,O_CREAT | O_TRUNC | O_RDWR , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+		
+		if(fd<0){
+			cout << "Cannot open file\n";
+			return;
+		}
+		char buffer[1024];
+		memset(buffer,0,1024);
+		sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\n\0","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
+		write(fd,buffer,strlen(buffer));
+		if(timerName.compare("")==0){
+			DFSconcise(root,fd);
+			return;
+		}
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		
+		if(timerIter != timers.end())
+			DFSconcise(&timerIter->second,fd);
+		else
+			cout << "Undefined timer '" << timerName << "'" << endl;
+		
+	}
+
+		
+	void DFSconcise(timer_T* timerObj,int filedes){
+		static int tabCount = 0;
+		char buffer[1024];
+		memset(buffer,0,1024);
+		if(timerObj -> nestedHead == NULL){
+	//		insertSlashT(tabCount,filedes);
+			sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
+			write(filedes,buffer,strlen(buffer));
+			if(timerObj -> inclusiveTime != 0){
+				sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
+				write(filedes,buffer,strlen(buffer));
+			}
+			if(timerObj -> calcFlops){
+				sprintf(buffer,"%12f\t",timerObj -> flopRate);
+				write(filedes,buffer,strlen(buffer));
+			}
+			if(timerObj -> calcBW){
+				sprintf(buffer,"%12s\t",timerObj -> bandwidth);
+				write(filedes,buffer,strlen(buffer));
+			}
+			write(filedes,"\n",1);	
+			return;
+		}
+		tabCount++;
+		struct timer_T* temp = timerObj->nestedHead;
+		while(temp!=NULL){
+			DFSconcise(temp,filedes);
+			timerObj -> inclusiveTime += temp -> time_in_sec;
+			temp = temp -> nestedNext;
+		}
+		
+		if(timerObj == root){
+			sprintf(buffer,"%f\n",root->inclusiveTime);
+			write(filedes,buffer,strlen(buffer));
+			return;
+		}
+		if(tabCount != 0)
+			tabCount--;
+	//	insertSlashT(tabCount,filedes);
+		sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
+		write(filedes,buffer,strlen(buffer));
+		if(timerObj -> inclusiveTime != 0){
+			sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
+			write(filedes,buffer,strlen(buffer));
+		}
+		if(timerObj -> calcFlops){
+			sprintf(buffer,"%12f\t",timerObj -> flopRate);
+			write(filedes,buffer,strlen(buffer));
+		}
+		if(timerObj -> calcBW){
+			sprintf(buffer,"%12f\t",timerObj -> bandwidth);
+			write(filedes,buffer,strlen(buffer));
+		}
+		write(filedes,"\n",1);
+			
+	}
 	void DFSprint(timer_T* timerObj){
 		static int tabCount = 0;
-		int j;
 		if(timerObj->nestedHead == NULL){
 			insertTab(tabCount);
 			cout << "***************" << endl;
@@ -238,12 +373,19 @@ public:
 				cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
 				insertTab(tabCount);
 				cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
+				timerObj -> inclusiveTime = 0;
 			}
+			if(timerObj->calcFlops){
+				insertTab(tabCount);
+				cout << "Flop rate: " << timerObj -> flopRate << endl;
+			}
+			if(timerObj->calcBW){
+				insertTab(tabCount);
+				cout << "Bandwidth " << timerObj -> bandwidth << endl;
+			}		
 			return;				
 		}
-		tabCount++;
-		int i;
-		
+		tabCount++;	
 		struct timer_T* temp = timerObj->nestedHead;
 		while(temp!=NULL){
 			DFSprint(temp);
@@ -268,6 +410,7 @@ public:
 		cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
 		insertTab(tabCount);
 		cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
+		timerObj -> inclusiveTime = 0;
 		if(timerObj->calcFlops){
 			insertTab(tabCount);
 			cout << "Flop rate: " << timerObj -> flopRate << endl;
@@ -275,57 +418,13 @@ public:
 		if(timerObj->calcBW){
 			insertTab(tabCount);
 			cout << "Bandwidth " << timerObj -> bandwidth << endl;
-		}		
+		}
+				
 	}
 
 };
 
 
 
-int main(){
-	Profiler<int> obj;
-	int i,j;
-//	obj.DebugReport(1);
 
-	obj.start("head's parent");
-		for(j = 0;j<2;j++){
-			obj.start("head");
-			for(i = 0;i<2;i++){
-				obj.start("A");
-				sleep(1);
-//	obj.stop("A");
-					obj.start("B");
-						obj.start("D");
-//	obj.stop("A");
-						sleep(2);
-						obj.stop("D");
-					obj.stop("B");
 
-					obj.start("C");
-					sleep(1);
-					obj.stop("C");
-
-				obj.stop("A");
-			}
-			obj.start("M");
-				obj.start("N");
-				sleep(1);
-				obj.stop("N");
-			obj.stop("M");
-//	obj.setFlop("A",2);
-//	obj.setMemory("M",10);
-			for(i = 0;i < 3;i++){
-				obj.start("test");
-				sleep(1);
-				obj.stop("test");
-			}
-			obj.stop("head");
-	}
-	obj.stop("head's parent");
-	obj.printReport();
-
-//	cout << "M's time: " << obj.getTime("M","ms") << endl;
-//	cout << "test's time: " << obj.getTime("test","ms") << endl;
-
-	return 0;
-}
