@@ -93,6 +93,7 @@ public:
 		debug = true;
 		totalTime = 0;
 	}
+
 public:
 	void start(string timerName,string parent){//attach to a particular parent, to support interleaved timers
 
@@ -287,7 +288,7 @@ public:
 		if(fileName == NULL)
 			fd = STDOUT_FILENO;
 		else
-			fd = open(fileName,O_CREAT | O_TRUNC | O_RDWR , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+			fd = open(fileName,O_CREAT | O_RDWR | O_APPEND , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 		
 		if(fd<0){
 			if(debug)
@@ -306,8 +307,11 @@ public:
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
 		
-		if(timerIter != timers.end())
+		if(timerIter != timers.end()){
 			DFSconcise(&timerIter->second,fd);
+			write(fd,"\n",1);
+			close(fd);
+		}
 		else
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
@@ -326,6 +330,7 @@ public:
 			if(timerObj -> inclusiveTime != 0){
 				sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
 				write(filedes,buffer,strlen(buffer));
+				timerObj -> inclusiveTime = 0;
 			}
 			if(timerObj -> calcFlops){
 				sprintf(buffer,"%12f\t",timerObj -> flopRate);
@@ -359,6 +364,7 @@ public:
 		if(timerObj -> inclusiveTime != 0){
 			sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
 			write(filedes,buffer,strlen(buffer));
+			timerObj -> inclusiveTime = 0;
 		}
 		if(timerObj -> calcFlops){
 			sprintf(buffer,"%12f\t",timerObj -> flopRate);
