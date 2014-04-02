@@ -84,15 +84,17 @@ public:
 	double totalTime;
 	std::map<string,timer_T> timers;
 	timer_T* root;
+	bool debug;
+
 	
 	Profiler(){//constructor to initialize the class members
 		root = new timer_T();
 		numberOfTimers = 0;
+		debug = true;
 		totalTime = 0;
 	}
 public:
-	
-	void start(string timerName,string parent){
+	void start(string timerName,string parent){//attach to a particular parent, to support interleaved timers
 
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
@@ -195,7 +197,8 @@ public:
 		timerIter = timers.find(timerName);
 		if(timerIter != timers.end()){//timer already exists
 			if(timers[timerName].stopFlag){
-				cout << "Timer " << timers[timerName].name << " already stopped" << endl;
+				if(debug)
+					cout << "Timer " << timers[timerName].name << " already stopped" << endl;
 				return;
 			}				
 			timers[timerName].stop();
@@ -209,7 +212,8 @@ public:
 				current->prev->next = NULL;
 		}
 		else{
-			std::cout << "Undefined timer '" << timerName << "'" << endl;
+			if(debug)
+				std::cout << "Undefined timer '" << timerName << "'" << endl;
 		}
 	}
 
@@ -219,7 +223,7 @@ public:
 			timerIter->second.reset();
 		}
 	}
-// void PrintError(string error){ if(dodebug) cout error
+	
 	double getTime(string timerName,string unit){//get the time taken in seconds or ms
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
@@ -229,11 +233,13 @@ public:
 			else if(unit.compare("ms")==0)
 				return timers[timerName].time_in_ms;
 			else
-				std::cout << "Specify a valid unit 'sec' or 'ms'" << endl;
+				if(debug)
+					std::cout << "Specify a valid unit 'sec' or 'ms'" << endl;
 				return -1;
 		}
 		else{
-			std::cout << "Undefined timer '" << timerName << "'" << endl;
+			if(debug)
+				std::cout << "Undefined timer '" << timerName << "'" << endl;
 			return -1;
 		}
 	}
@@ -255,11 +261,13 @@ public:
 			cout<<"-----";
 	}	
 
-	void insertSlashT(int count,int fd){
+/*	void insertSlashT(int count,int fd){
 		int i;
 		for(i=0;i<count;i++)
 			write(fd,"----",4);
-	}
+	}*/
+	
+	
 	void printReport(){
 		DFSprint(root);
 	}
@@ -270,7 +278,8 @@ public:
 		if(timerIter != timers.end())
 			DFSprint(&timerIter->second);
 		else
-			cout << "Undefined timer '" << timerName << "'" << endl;
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;
 	}
 	
 	void printConcise(string timerName,char* fileName){
@@ -281,11 +290,13 @@ public:
 			fd = open(fileName,O_CREAT | O_TRUNC | O_RDWR , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 		
 		if(fd<0){
-			cout << "Cannot open file\n";
+			if(debug)
+				cout << "Cannot open file\n";
 			return;
 		}
 		char buffer[1024];
 		memset(buffer,0,1024);
+	
 		sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\n\0","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
 		write(fd,buffer,strlen(buffer));
 		if(timerName.compare("")==0){
@@ -298,7 +309,8 @@ public:
 		if(timerIter != timers.end())
 			DFSconcise(&timerIter->second,fd);
 		else
-			cout << "Undefined timer '" << timerName << "'" << endl;
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;
 		
 	}
 
@@ -359,7 +371,7 @@ public:
 		write(filedes,"\n",1);
 			
 	}
-	void DFSprint(timer_T* timerObj){
+	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
 		static int tabCount = 0;
 		if(timerObj->nestedHead == NULL){
 			insertTab(tabCount);
