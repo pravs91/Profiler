@@ -94,7 +94,22 @@ public:
 		totalTime = 0;
 	}
 
+	Profiler(string chosen){//constructor to choose the timer to use
+		root = new timer_T();
+		numberOfTimers = 0;
+		debug = true;
+		totalTime = 0;
+		if(chosen.compare("OPENMP")==0){
+			choice = OPENMP_TIMER;
+		}
+		else if(chosen.compare("CLOCK")==0){
+			choice = CLOCK_TIMER;
+		}
+
+	}
+
 public:
+
 	void start(string timerName,string parent){//attach to a particular parent, to support interleaved timers
 
 		std::map<string,timer_T>::iterator timerIter;
