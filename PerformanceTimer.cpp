@@ -80,7 +80,7 @@ template<typename T>
 class Profiler
 {
 public:
-	int numberOfTimers;
+	int numberOfTimers, fd;
 	double totalTime;
 	std::map<string,timer_T> timers;
 	timer_T* root;
@@ -92,6 +92,7 @@ public:
 		numberOfTimers = 0;
 		debug = true;
 		totalTime = 0;
+		fd = -10;
 	}
 
 	Profiler(string chosen){//constructor to choose the timer to use
@@ -99,6 +100,7 @@ public:
 		numberOfTimers = 0;
 		debug = true;
 		totalTime = 0;
+		fd = -10;
 		if(chosen.compare("OPENMP")==0){
 			choice = OPENMP_TIMER;
 		}
@@ -297,14 +299,43 @@ public:
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
 	}
+	void printToStdOut(string timerName){
+		int std = STDOUT_FILENO;
+		char buffer[1024];
+		memset(buffer,0,1024);
 	
-	void printConcise(string timerName,char* fileName){
-		int fd;
-		if(fileName == NULL)
-			fd = STDOUT_FILENO;
-		else
-			fd = open(fileName,O_CREAT | O_RDWR | O_APPEND , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+		sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\n\0","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
+		write(std,buffer,strlen(buffer));
+		if(timerName.compare("")==0){
+			DFSconcise(root,std);
+			return;
+		}
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
 		
+		if(timerIter != timers.end()){
+			DFSconcise(&timerIter->second,std);
+			write(fd,"\n",1);
+		//	close(fd);
+		}
+		else{
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;
+		}
+	}
+	void printConcise(string timerName,string file){
+		const char *fileName = file.c_str();
+		if(file.compare("STDOUT")==0){
+			printToStdOut(timerName);
+			return;
+		}
+		else{
+			if(fd < 0 || fd == 1){//create file if file doesn't exist
+				fd = open(fileName,O_CREAT | O_RDWR | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+			}
+			else //open file in append mode
+				fd = open(fileName,O_RDWR | O_APPEND); 
+		}
 		if(fd<0){
 			if(debug)
 				cout << "Cannot open file\n";
@@ -325,7 +356,7 @@ public:
 		if(timerIter != timers.end()){
 			DFSconcise(&timerIter->second,fd);
 			write(fd,"\n",1);
-			close(fd);
+		//	close(fd);
 		}
 		else
 			if(debug)
