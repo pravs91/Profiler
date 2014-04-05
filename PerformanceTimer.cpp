@@ -209,7 +209,6 @@ public:
 			}
 		}
 	}
-	
 	void stop(string timerName){//stop the user-defined timer
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
@@ -279,11 +278,11 @@ public:
 			cout<<"-----";
 	}	
 
-/*	void insertSlashT(int count,int fd){
+	void dottedLine(int count,int fd){
 		int i;
 		for(i=0;i<count;i++)
 			write(fd,"----",4);
-	}*/
+	}
 	
 	
 	void printReport(){
@@ -299,7 +298,7 @@ public:
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
 	}
-	void printToStdOut(string timerName){
+	void printToStdOut(string timerName){//prints concise report to stdout
 		int std = STDOUT_FILENO;
 		char buffer[1024];
 		memset(buffer,0,1024);
@@ -323,6 +322,7 @@ public:
 				cout << "Undefined timer '" << timerName << "'" << endl;
 		}
 	}
+
 	void printConcise(string timerName,string file){
 		const char *fileName = file.c_str();
 		if(file.compare("STDOUT")==0){
@@ -364,7 +364,94 @@ public:
 		
 	}
 
+	void printNestedStdout(string timerName){//function to print nested timers to stdout
+		int std = STDOUT_FILENO;
+		char buffer[1024];
+		memset(buffer,0,1024);
+	
+		if(timerName.compare("")==0){
+			DFSnestedPrint(root,std);
+			return;
+		}
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
 		
+		if(timerIter != timers.end()){
+			DFSnestedPrint(&timerIter->second,std);
+			write(fd,"\n",1);
+		}
+		else{
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;
+		}
+	}
+	void printNestedTimers(string timerName,string file){//function to print nested timers to file.
+		const char *fileName = file.c_str();
+		if(file.compare("STDOUT")==0){
+			printNestedStdout(timerName);
+			return;
+		}
+		else{
+			if(fd < 0 || fd == 1){//create file if file doesn't exist
+				fd = open(fileName,O_CREAT | O_RDWR | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+			}
+			else //open file in append mode
+				fd = open(fileName,O_RDWR | O_APPEND); 
+		}
+		if(fd<0){
+			if(debug)
+				cout << "Cannot open file\n";
+			return;
+		}
+		char buffer[1024];
+		memset(buffer,0,1024);
+		if(timerName.compare("")==0){
+			DFSnestedPrint(root,fd);
+			return;
+		}
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		
+		if(timerIter != timers.end()){
+			DFSnestedPrint(&timerIter->second,fd);
+			write(fd,"\n",1);
+		//	close(fd);
+		}
+		else
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;
+				
+	}	
+
+	void DFSnestedPrint(timer_T* timerObj,int filedes){//DFS for printing nested timers
+		static int tabCount = -1;
+		char buffer[1024];
+		memset(buffer,0,1024);
+		if(timerObj -> nestedHead == NULL){
+			tabCount++;
+			dottedLine(tabCount,filedes);
+			sprintf(buffer,"%s",timerObj -> name.c_str());	
+			write(filedes,buffer,strlen(buffer));
+			write(filedes,"\n",1);
+			if(tabCount != 0)
+				tabCount--;
+
+			return;
+		}
+		tabCount++;
+		dottedLine(tabCount,filedes);
+		sprintf(buffer,"%s",timerObj -> name.c_str());	
+		write(filedes,buffer,strlen(buffer));				
+		write(filedes,"\n",1);
+		struct timer_T* temp = timerObj -> nestedHead;
+		while(temp != NULL){
+			DFSnestedPrint(temp,filedes);
+			temp = temp -> nestedNext;	
+		}
+		if(tabCount != 0)
+			tabCount--;
+		
+	}	
 	void DFSconcise(timer_T* timerObj,int filedes){
 		static int tabCount = 0;
 		char buffer[1024];
@@ -423,6 +510,7 @@ public:
 		write(filedes,"\n",1);
 			
 	}
+	
 	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
 		static int tabCount = 0;
 		if(timerObj->nestedHead == NULL){
