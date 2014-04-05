@@ -23,6 +23,7 @@ typedef struct timer_T{
 	int numRuns;
 	string name;
 	PerformanceTimer<double> timer;
+	double averageTime;
 
 	struct timer_T* next;
 	struct timer_T* prev;
@@ -34,6 +35,7 @@ typedef struct timer_T{
 	timer_T(){
 		flop = memOps = time_in_sec = time_in_ms = 0;
 		bandwidth = flopRate = 0;
+		averageTime = 0;
 		numRuns = 0;
 		calcFlops = calcBW = false;
 		next = prev = NULL;
@@ -272,12 +274,6 @@ public:
 		timers[timerName].calcBW = true;
 		timers[timerName].computeBW();
 	}
-	void insertTab(int count){
-		int i;
-		for(i = 0;i < count; i++)
-			cout<<"-----";
-	}	
-
 	void dottedLine(int count,int fd){
 		int i;
 		for(i=0;i<count;i++)
@@ -323,7 +319,7 @@ public:
 		}
 	}
 
-	void printConcise(string timerName,string file){
+	void printConcise(string timerName,string file){//print concise report
 		const char *fileName = file.c_str();
 		if(file.compare("STDOUT")==0){
 			printToStdOut(timerName);
@@ -400,7 +396,7 @@ public:
 		}
 		if(fd<0){
 			if(debug)
-				cout << "Cannot open file\n";
+				cout << "Cannot open file '" << file <<"'" <<endl;
 			return;
 		}
 		char buffer[1024];
@@ -457,7 +453,6 @@ public:
 		char buffer[1024];
 		memset(buffer,0,1024);
 		if(timerObj -> nestedHead == NULL){
-	//		insertSlashT(tabCount,filedes);
 			sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
 			write(filedes,buffer,strlen(buffer));
 			if(timerObj -> inclusiveTime != 0){
@@ -491,7 +486,6 @@ public:
 		}
 		if(tabCount != 0)
 			tabCount--;
-	//	insertSlashT(tabCount,filedes);
 		sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
 		write(filedes,buffer,strlen(buffer));
 		if(timerObj -> inclusiveTime != 0){
@@ -514,25 +508,25 @@ public:
 	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
 		static int tabCount = 0;
 		if(timerObj->nestedHead == NULL){
-			insertTab(tabCount);
+			dottedLine(tabCount,1);
 			cout << "***************" << endl;
-			insertTab(tabCount);
+			dottedLine(tabCount,1);
 			cout << "Timer Name: " << timerObj->name << endl;
-			insertTab(tabCount);
+			dottedLine(tabCount,1);
 			cout << "Time taken: " << timerObj->time_in_sec << "s = " << timerObj->time_in_ms << "ms" << endl;
 			if(timerObj -> inclusiveTime != 0){
-				insertTab(tabCount);
+				dottedLine(tabCount,1);
 				cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
-				insertTab(tabCount);
+				dottedLine(tabCount,1);
 				cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
 				timerObj -> inclusiveTime = 0;
 			}
 			if(timerObj->calcFlops){
-				insertTab(tabCount);
+				dottedLine(tabCount,1);
 				cout << "Flop rate: " << timerObj -> flopRate << endl;
 			}
 			if(timerObj->calcBW){
-				insertTab(tabCount);
+				dottedLine(tabCount,1);
 				cout << "Bandwidth " << timerObj -> bandwidth << endl;
 			}		
 			return;				
@@ -552,26 +546,45 @@ public:
 		}
 		if(tabCount != 0)
 			tabCount--;
-		insertTab(tabCount);
+		dottedLine(tabCount,1);
 		cout << "***************" << endl;
-		insertTab(tabCount);
+		dottedLine(tabCount,1);
 		cout << "Timer Name: " << timerObj->name << endl;
-		insertTab(tabCount);
+		dottedLine(tabCount,1);
 		cout << "Time taken: " << timerObj->time_in_sec << "s = " << timerObj->time_in_ms << "ms" << endl;
-		insertTab(tabCount);
+		dottedLine(tabCount,1);
 		cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
-		insertTab(tabCount);
+		dottedLine(tabCount,1);
 		cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
 		timerObj -> inclusiveTime = 0;
 		if(timerObj->calcFlops){
-			insertTab(tabCount);
+			dottedLine(tabCount,1);
 			cout << "Flop rate: " << timerObj -> flopRate << endl;
 		}
 		if(timerObj->calcBW){
-			insertTab(tabCount);
+			dottedLine(tabCount,1);
 			cout << "Bandwidth " << timerObj -> bandwidth << endl;
 		}
 				
+	}
+
+	void dumpReference(string file){
+		const char* fileName = file.c_str();
+		char buffer[1024];
+		memset(buffer,0,1024);
+		int fd = open(fileName,O_CREAT | O_RDWR | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+		if(fd<0){
+			if(debug)
+				cout << "Cannot open file '" << file <<"'" <<endl;
+			return;
+		}
+		std::map<string,timer_T>::iterator timerIter;
+		for(timerIter = timers.begin();timerIter != timers.end();timerIter++){
+			timerIter->second.averageTime = timerIter->second.time_in_sec/timerIter->second.numRuns;
+			sprintf(buffer,"%-20s\t%f\n",timerIter->second.name.c_str(),timerIter->second.averageTime);
+			write(fd,buffer,strlen(buffer));
+		}
+		
 	}
 
 };
