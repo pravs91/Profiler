@@ -13,6 +13,7 @@
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
+#include <fstream>
 using namespace std;
 
 typedef struct timer_T{
@@ -24,7 +25,7 @@ typedef struct timer_T{
 	string name;
 	PerformanceTimer<double> timer;
 	double averageTime;
-
+	double averageFR,averageBW;
 	struct timer_T* next;
 	struct timer_T* prev;
 	struct timer_T* nestedHead;
@@ -35,7 +36,7 @@ typedef struct timer_T{
 	timer_T(){
 		flop = memOps = time_in_sec = time_in_ms = 0;
 		bandwidth = flopRate = 0;
-		averageTime = 0;
+		averageTime = averageFR = averageBW = 0;
 		numRuns = 0;
 		calcFlops = calcBW = false;
 		next = prev = NULL;
@@ -76,7 +77,16 @@ typedef struct timer_T{
 
 }timer_T;
 
+typedef struct compare{
+	string name;
+	double time;
+	double flopRate;	
+	double bandwidth;
 
+	compare(){
+		time = flopRate = bandwidth = 0;
+	}
+}compare;
 
 template<typename T>
 class Profiler
@@ -85,6 +95,7 @@ public:
 	int numberOfTimers, fd;
 	double totalTime;
 	std::map<string,timer_T> timers;
+	std::map<string,compare> reference;
 	timer_T* root;
 	bool debug;
 
@@ -581,10 +592,40 @@ public:
 		std::map<string,timer_T>::iterator timerIter;
 		for(timerIter = timers.begin();timerIter != timers.end();timerIter++){
 			timerIter->second.averageTime = timerIter->second.time_in_sec/timerIter->second.numRuns;
-			sprintf(buffer,"%-20s\t%f\n",timerIter->second.name.c_str(),timerIter->second.averageTime);
+			timerIter->second.averageFR = timerIter->second.flopRate/timerIter->second.numRuns;
+			timerIter->second.averageBW = timerIter->second.bandwidth/timerIter->second.numRuns;
+			sprintf(buffer,"%f %f %f %s\n",timerIter->second.averageTime,timerIter->second.averageFR,timerIter->second.averageBW,timerIter->second.name.c_str());
 			write(fd,buffer,strlen(buffer));
 		}
 		
+	}
+
+	void readReference(char* fileName){
+		FILE *fp;
+		char line[1024];
+		fp = fopen(fileName,"r");
+		char* name;
+		double t,fr,bw;
+		if(fp == NULL){
+			if(debug)
+				cout << "Cannot open file '" << fileName << "'" << endl;
+			return;
+		}
+		while(1){
+			if(fgets(line,1024,fp)==NULL)
+				break;
+			sscanf(line,"%lf %lf %lf %[^\t\n]",&t,&fr,&bw,name);
+			compare* temp = new compare();
+			temp -> name = name;
+			temp -> time = t;
+			temp -> flopRate = fr;
+			temp -> bandwidth = bw;
+			reference[name] = *temp;
+		}
+		std::map<string,compare>::iterator it;
+		for(it=reference.begin();it!=reference.end();it++){
+			cout << it->second.name << "\t" << it->second.time << "\t" << it->second.flopRate << "\t" << it->second.bandwidth << endl;
+		}
 	}
 
 };
