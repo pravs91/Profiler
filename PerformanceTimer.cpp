@@ -26,11 +26,13 @@ typedef struct timer_T{
 	PerformanceTimer<double> timer;
 	double averageTime;
 	double averageFR,averageBW;
+	double timeImprovement,FRImprovement,BWImprovement;
 	struct timer_T* next;
 	struct timer_T* prev;
 	struct timer_T* nestedHead;
 	struct timer_T* nestedTail;
 	struct timer_T* nestedNext;
+
 
 	double inclusiveTime;
 	timer_T(){
@@ -38,6 +40,7 @@ typedef struct timer_T{
 		bandwidth = flopRate = 0;
 		averageTime = averageFR = averageBW = 0;
 		numRuns = 0;
+		timeImprovement = FRImprovement = BWImprovement = 0;
 		calcFlops = calcBW = false;
 		next = prev = NULL;
 		inclusiveTime = 0;
@@ -98,6 +101,7 @@ public:
 	std::map<string,compare> reference;
 	timer_T* root;
 	bool debug;
+	bool refFlag;
 
 	
 	Profiler(){//constructor to initialize the class members
@@ -106,6 +110,7 @@ public:
 		debug = true;
 		totalTime = 0;
 		fd = -10;
+		refFlag = false;
 	}
 
 	Profiler(string chosen){//constructor to choose the timer to use
@@ -114,6 +119,7 @@ public:
 		debug = true;
 		totalTime = 0;
 		fd = -10;
+		refFlag = false;
 		if(chosen.compare("OPENMP")==0){
 			choice = OPENMP_TIMER;
 		}
@@ -301,16 +307,20 @@ public:
 		timerIter = timers.find(timerName);
 		if(timerIter != timers.end())
 			DFSprint(&timerIter->second);
-		else
+		else{
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
+		}
 	}
-	void printToStdOut(string timerName){//prints concise report to stdout
+	void printConciseStdOut(string timerName){//prints concise report to stdout
 		int std = STDOUT_FILENO;
 		char buffer[1024];
 		memset(buffer,0,1024);
+		if(refFlag)
+			sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\t%12s\t%12s\t%12s\n","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth","t(change)","FR(change)","BW(change)");
+		else
+			sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\t\n","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
 	
-		sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\n\0","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
 		write(std,buffer,strlen(buffer));
 		if(timerName.compare("")==0){
 			DFSconcise(root,std);
@@ -322,7 +332,6 @@ public:
 		if(timerIter != timers.end()){
 			DFSconcise(&timerIter->second,std);
 			write(fd,"\n",1);
-		//	close(fd);
 		}
 		else{
 			if(debug)
@@ -333,7 +342,7 @@ public:
 	void printConcise(string timerName,string file){//print concise report
 		const char *fileName = file.c_str();
 		if(file.compare("STDOUT")==0){
-			printToStdOut(timerName);
+			printConciseStdOut(timerName);
 			return;
 		}
 		else{
@@ -345,13 +354,16 @@ public:
 		}
 		if(fd<0){
 			if(debug)
-				cout << "Cannot open file\n";
+				cout << "Cannot open file '" << file << "'" << endl;
 			return;
 		}
 		char buffer[1024];
 		memset(buffer,0,1024);
-	
-		sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\n\0","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
+		if(refFlag)
+			sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\t%12s\t%12s\t%12s\n","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth","t(change)","FR(change)","BW(change)");
+		else
+			sprintf(buffer,"%-20s\t%12s\t%16s\t%12s\t%12s\t%12s\t%12s\t\n","Timer Name","Time(s)","Time(ms)","t_Nested(s)","Nested %","Flop_Rate","Bandwidth");
+				
 		write(fd,buffer,strlen(buffer));
 		if(timerName.compare("")==0){
 			DFSconcise(root,fd);
@@ -363,12 +375,11 @@ public:
 		if(timerIter != timers.end()){
 			DFSconcise(&timerIter->second,fd);
 			write(fd,"\n",1);
-		//	close(fd);
 		}
-		else
+		else{
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
-		
+		}
 	}
 
 	void printNestedStdout(string timerName){//function to print nested timers to stdout
@@ -424,10 +435,10 @@ public:
 			write(fd,"\n",1);
 		//	close(fd);
 		}
-		else
+		else{
 			if(debug)
 				cout << "Undefined timer '" << timerName << "'" << endl;
-				
+		}		
 	}	
 
 	void DFSnestedPrint(timer_T* timerObj,int filedes){//DFS for printing nested timers
@@ -458,31 +469,74 @@ public:
 		if(tabCount != 0)
 			tabCount--;
 		
+	}
+
+	void conciseHelper(timer_T* timerObj,int filedes){//helper function to print for DFSconcise
+		char buffer[1024];
+		memset(buffer,0,1024);
+		sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
+		write(filedes,buffer,strlen(buffer));
+		if(timerObj -> inclusiveTime != 0){
+			sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
+			write(filedes,buffer,strlen(buffer));
+			timerObj -> inclusiveTime = 0;
+		}
+		else{
+			sprintf(buffer,"%12s\t%12s\t","N/A","N/A");
+			write(filedes,buffer,strlen(buffer));	
+		}
+		if(timerObj -> calcFlops){
+			sprintf(buffer,"%12f\t",timerObj -> flopRate);
+			write(filedes,buffer,strlen(buffer));
+		}
+		else{
+			sprintf(buffer,"%12s\t","N/A");
+			write(filedes,buffer,strlen(buffer));	
+		}
+		if(timerObj -> calcBW){
+			sprintf(buffer,"%12s\t",timerObj -> bandwidth);
+			write(filedes,buffer,strlen(buffer));
+		}
+		else{
+			sprintf(buffer,"%12s\t","N/A");
+			write(filedes,buffer,strlen(buffer));	
+		}
+		if(refFlag){
+			if(timerObj -> timeImprovement != 0){
+				sprintf(buffer,"%12f\t",timerObj->timeImprovement);
+				write(filedes,buffer,strlen(buffer));	
+			}
+			else{
+				sprintf(buffer,"%12s\t","N/A");
+				write(filedes,buffer,strlen(buffer));	
+			}
+			if(timerObj -> FRImprovement != 0){
+				sprintf(buffer,"%12f\t",timerObj->FRImprovement);
+				write(filedes,buffer,strlen(buffer));	
+			}
+			else{
+				sprintf(buffer,"%12s\t","N/A");
+				write(filedes,buffer,strlen(buffer));	
+			}
+			if(timerObj -> BWImprovement != 0){
+				sprintf(buffer,"%12f\t",timerObj->BWImprovement);
+				write(filedes,buffer,strlen(buffer));	
+			}
+			else{
+				sprintf(buffer,"%12s\t","N/A");
+				write(filedes,buffer,strlen(buffer));	
+			}
+		}
+		
 	}	
 	void DFSconcise(timer_T* timerObj,int filedes){
-		static int tabCount = 0;
 		char buffer[1024];
 		memset(buffer,0,1024);
 		if(timerObj -> nestedHead == NULL){
-			sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
-			write(filedes,buffer,strlen(buffer));
-			if(timerObj -> inclusiveTime != 0){
-				sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
-				write(filedes,buffer,strlen(buffer));
-				timerObj -> inclusiveTime = 0;
-			}
-			if(timerObj -> calcFlops){
-				sprintf(buffer,"%12f\t",timerObj -> flopRate);
-				write(filedes,buffer,strlen(buffer));
-			}
-			if(timerObj -> calcBW){
-				sprintf(buffer,"%12s\t",timerObj -> bandwidth);
-				write(filedes,buffer,strlen(buffer));
-			}
+			conciseHelper(timerObj,filedes);
 			write(filedes,"\n",1);	
 			return;
 		}
-		tabCount++;
 		struct timer_T* temp = timerObj->nestedHead;
 		while(temp!=NULL){
 			DFSconcise(temp,filedes);
@@ -493,53 +547,41 @@ public:
 		if(timerObj == root){
 			sprintf(buffer,"%f\n",root->inclusiveTime);
 			write(filedes,buffer,strlen(buffer));
+			root->inclusiveTime = 0;
 			return;
 		}
-		if(tabCount != 0)
-			tabCount--;
-		sprintf(buffer,"%-20s\t%12f\t%16f\t",timerObj -> name.c_str(), timerObj -> time_in_sec, timerObj -> time_in_ms);
-		write(filedes,buffer,strlen(buffer));
-		if(timerObj -> inclusiveTime != 0){
-			sprintf(buffer,"%12f\t%12f %\t",timerObj->inclusiveTime, (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100);
-			write(filedes,buffer,strlen(buffer));
-			timerObj -> inclusiveTime = 0;
-		}
-		if(timerObj -> calcFlops){
-			sprintf(buffer,"%12f\t",timerObj -> flopRate);
-			write(filedes,buffer,strlen(buffer));
-		}
-		if(timerObj -> calcBW){
-			sprintf(buffer,"%12f\t",timerObj -> bandwidth);
-			write(filedes,buffer,strlen(buffer));
-		}
+		conciseHelper(timerObj,filedes);
 		write(filedes,"\n",1);
 			
 	}
-	
+
+	void printHelper(timer_T* timerObj,int tabCount){//helper function to print for printReport
+		dottedLine(tabCount,1);
+		cout << "***************" << endl;
+		dottedLine(tabCount,1);
+		cout << "Timer Name: " << timerObj->name << endl;
+		dottedLine(tabCount,1);
+		cout << "Time taken: " << timerObj->time_in_sec << "s = " << timerObj->time_in_ms << "ms" << endl;
+		if(timerObj -> inclusiveTime != 0){
+			dottedLine(tabCount,1);
+			cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
+			dottedLine(tabCount,1);
+			cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
+			timerObj -> inclusiveTime = 0;
+		}
+		if(timerObj->calcFlops){
+			dottedLine(tabCount,1);
+			cout << "Flop rate: " << timerObj -> flopRate << endl;
+		}
+		if(timerObj->calcBW){
+			dottedLine(tabCount,1);
+			cout << "Bandwidth " << timerObj -> bandwidth << endl;
+		}		
+	}	
 	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
 		static int tabCount = 0;
 		if(timerObj->nestedHead == NULL){
-			dottedLine(tabCount,1);
-			cout << "***************" << endl;
-			dottedLine(tabCount,1);
-			cout << "Timer Name: " << timerObj->name << endl;
-			dottedLine(tabCount,1);
-			cout << "Time taken: " << timerObj->time_in_sec << "s = " << timerObj->time_in_ms << "ms" << endl;
-			if(timerObj -> inclusiveTime != 0){
-				dottedLine(tabCount,1);
-				cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
-				dottedLine(tabCount,1);
-				cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
-				timerObj -> inclusiveTime = 0;
-			}
-			if(timerObj->calcFlops){
-				dottedLine(tabCount,1);
-				cout << "Flop rate: " << timerObj -> flopRate << endl;
-			}
-			if(timerObj->calcBW){
-				dottedLine(tabCount,1);
-				cout << "Bandwidth " << timerObj -> bandwidth << endl;
-			}		
+			printHelper(timerObj,tabCount);		
 			return;				
 		}
 		tabCount++;	
@@ -557,29 +599,18 @@ public:
 		}
 		if(tabCount != 0)
 			tabCount--;
-		dottedLine(tabCount,1);
-		cout << "***************" << endl;
-		dottedLine(tabCount,1);
-		cout << "Timer Name: " << timerObj->name << endl;
-		dottedLine(tabCount,1);
-		cout << "Time taken: " << timerObj->time_in_sec << "s = " << timerObj->time_in_ms << "ms" << endl;
-		dottedLine(tabCount,1);
-		cout << "Nested timers' time: " << timerObj->inclusiveTime << endl;
-		dottedLine(tabCount,1);
-		cout << "Nested timers' percentage: " << (timerObj -> inclusiveTime / timerObj -> time_in_sec) * 100 << " %" << endl;
-		timerObj -> inclusiveTime = 0;
-		if(timerObj->calcFlops){
-			dottedLine(tabCount,1);
-			cout << "Flop rate: " << timerObj -> flopRate << endl;
-		}
-		if(timerObj->calcBW){
-			dottedLine(tabCount,1);
-			cout << "Bandwidth " << timerObj -> bandwidth << endl;
-		}
-				
+		printHelper(timerObj,tabCount);			
 	}
 
-	void dumpReference(string file){
+	void computeAverage(){//compute average time, fr, bw for each timer
+		std::map<string,timer_T>::iterator timerIter;
+		for(timerIter = timers.begin();timerIter != timers.end();timerIter++){
+			timerIter->second.averageTime = timerIter->second.time_in_sec/timerIter->second.numRuns;
+			timerIter->second.averageFR = timerIter->second.flopRate/timerIter->second.numRuns;
+			timerIter->second.averageBW = timerIter->second.bandwidth/timerIter->second.numRuns;
+		}
+	}
+	void dumpReference(string file){//dump data to reference file
 		const char* fileName = file.c_str();
 		char buffer[1024];
 		memset(buffer,0,1024);
@@ -590,21 +621,21 @@ public:
 			return;
 		}
 		std::map<string,timer_T>::iterator timerIter;
+		computeAverage();
 		for(timerIter = timers.begin();timerIter != timers.end();timerIter++){
-			timerIter->second.averageTime = timerIter->second.time_in_sec/timerIter->second.numRuns;
-			timerIter->second.averageFR = timerIter->second.flopRate/timerIter->second.numRuns;
-			timerIter->second.averageBW = timerIter->second.bandwidth/timerIter->second.numRuns;
 			sprintf(buffer,"%f %f %f %s\n",timerIter->second.averageTime,timerIter->second.averageFR,timerIter->second.averageBW,timerIter->second.name.c_str());
 			write(fd,buffer,strlen(buffer));
 		}
 		
 	}
 
-	void readReference(char* fileName){
+	void readReference(const char* fileName){//read data from reference file into hash
 		FILE *fp;
-		char line[1024];
+		char *line = (char*) malloc(sizeof(char) * 1024);
+		memset(line,0,1024);
 		fp = fopen(fileName,"r");
-		char* name;
+		char* name = (char*) malloc(sizeof(char) * 255);
+		memset(name,0,255);
 		double t,fr,bw;
 		if(fp == NULL){
 			if(debug)
@@ -622,9 +653,43 @@ public:
 			temp -> bandwidth = bw;
 			reference[name] = *temp;
 		}
-		std::map<string,compare>::iterator it;
-		for(it=reference.begin();it!=reference.end();it++){
-			cout << it->second.name << "\t" << it->second.time << "\t" << it->second.flopRate << "\t" << it->second.bandwidth << endl;
+	}
+	
+	void computeImprovement(){//compute the percentage improvement for current run vs reference data
+		std::map<string,timer_T>::iterator timerIter;
+		std::map<string,compare>::iterator compIter;
+		computeAverage();
+		for(timerIter=timers.begin();timerIter!=timers.end();timerIter++){
+			compIter = reference.find(timerIter->second.name);
+			if(compIter != reference.end()){
+				timerIter->second.timeImprovement = (compIter->second.time - timerIter->second.averageTime) * 100/compIter->second.time;
+				if(compIter->second.flopRate != 0)
+					timerIter->second.FRImprovement = (compIter->second.flopRate - timerIter->second.averageFR) * 100/compIter->second.flopRate;
+				if(compIter->second.bandwidth != 0)
+					timerIter->second.BWImprovement = (compIter->second.bandwidth - timerIter->second.averageBW) * 100/compIter->second.bandwidth;
+	
+			}
+			else{
+				cout << "Cannot find reference data for timer '" << timerIter->second.name << "'" << endl;
+			}	
+		}
+		
+	}
+
+	void comparisonReport(string timerName,string newFile,string refFile){//generate comparison report
+		fd = -10;
+		refFlag = true;
+		const char* refName = refFile.c_str();
+		readReference(refName);
+		std::map<string,timer_T>::iterator iter;
+		iter=timers.find(timerName);
+		if(iter!=timers.end() || timerName.compare("")==0){
+			computeImprovement();
+			printConcise(timerName,newFile);
+		}
+		else{	
+			if(debug)
+				cout << "Undefined timer '" << timerName << "'" << endl;		
 		}
 	}
 
