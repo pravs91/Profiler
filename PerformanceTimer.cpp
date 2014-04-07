@@ -91,7 +91,7 @@ typedef struct compare{
 	}
 }compare;
 
-template<typename T>
+//template<typename T>
 class Profiler
 {
 public:
@@ -173,7 +173,7 @@ public:
 		}
 		
 	}
-	void start(string timerName){
+	void start(string timerName){//function to start the user defined timer
 		std::map<string,timer_T>::iterator timerIter;
 		timerIter = timers.find(timerName);
 		if(timerIter != timers.end()){
