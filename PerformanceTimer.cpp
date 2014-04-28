@@ -179,6 +179,11 @@ public:
 		if(timerIter != timers.end()){
 			timers[timerName].start();
 			timers[timerName].stopFlag = false;
+			//*****tentative solution, should check if it breaks anything else******//
+			timer_T* current = &timers[timerName];//current = timer to start
+			if(current != NULL && current -> prev != NULL)
+				current -> prev -> next = &timers[timerName];
+			//*****end of tentative solution******
 		}
 		else{
 			struct timer_T* traverse = root->nestedHead;
