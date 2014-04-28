@@ -295,13 +295,15 @@ public:
 	void setFlop(string timerName,double f){//set flop count
 		timers[timerName].flop = f;
 		timers[timerName].calcFlops = true;
-		timers[timerName].computeFlops();
+		if(timers[timerName].time_in_sec != 0)
+			timers[timerName].computeFlops();
 	}
 
 	void setMemory(string timerName,double m){//set memory transfer count for BW calculation
 		timers[timerName].memOps = m;
 		timers[timerName].calcBW = true;
-		timers[timerName].computeBW();
+		if(timers[timerName].time_in_sec != 0)
+			timers[timerName].computeBW();
 	}
 	void dottedLine(int count,int fd){
 		int i;
@@ -505,7 +507,7 @@ public:
 			write(filedes,buffer,strlen(buffer));	
 		}
 		if(timerObj -> calcBW){
-			sprintf(buffer,"%12s\t",timerObj -> bandwidth);
+			sprintf(buffer,"%12f\t",timerObj -> bandwidth);
 			write(filedes,buffer,strlen(buffer));
 		}
 		else{
@@ -587,7 +589,7 @@ public:
 		}
 		if(timerObj->calcBW){
 			dottedLine(tabCount,1);
-			cout << "Bandwidth " << timerObj -> bandwidth << endl;
+			cout << "Bandwidth: " << timerObj -> bandwidth << endl;
 		}		
 	}	
 	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
