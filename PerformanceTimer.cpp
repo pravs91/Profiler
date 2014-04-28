@@ -102,7 +102,8 @@ public:
 	timer_T* root;
 	bool debug;
 	bool refFlag;
-
+	int dashCount;
+	int tabCount;
 	
 	Profiler(){//constructor to initialize the class members
 		root = new timer_T();
@@ -111,6 +112,8 @@ public:
 		totalTime = 0;
 		fd = -10;
 		refFlag = false;
+		dashCount = -1;
+		tabCount = 0;
 	}
 
 	Profiler(string chosen){//constructor to choose the timer to use
@@ -120,6 +123,8 @@ public:
 		totalTime = 0;
 		fd = -10;
 		refFlag = false;
+		dashCount = -1;
+		tabCount = 0;
 		if(chosen.compare("OPENMP")==0){
 			choice = OPENMP_TIMER;
 		}
@@ -260,6 +265,8 @@ public:
 
 	void reset(){//reset all timer data
 		std::map<string,timer_T>::iterator timerIter;
+		tabCount = 0;
+		dashCount = -1;
 		for(timerIter = timers.begin();timerIter != timers.end();timerIter++){
 			timerIter->second.reset();
 		}
@@ -447,22 +454,21 @@ public:
 	}	
 
 	void DFSnestedPrint(timer_T* timerObj,int filedes){//DFS for printing nested timers
-		static int tabCount = -1;
 		char buffer[1024];
 		memset(buffer,0,1024);
 		if(timerObj -> nestedHead == NULL){
-			tabCount++;
-			dottedLine(tabCount,filedes);
+			dashCount++;
+			dottedLine(dashCount,filedes);
 			sprintf(buffer,"%s",timerObj -> name.c_str());	
 			write(filedes,buffer,strlen(buffer));
 			write(filedes,"\n",1);
-			if(tabCount != 0)
-				tabCount--;
+			if(dashCount != 0)
+				dashCount--;
 
 			return;
 		}
-		tabCount++;
-		dottedLine(tabCount,filedes);
+		dashCount++;
+		dottedLine(dashCount,filedes);
 		sprintf(buffer,"%s",timerObj -> name.c_str());	
 		write(filedes,buffer,strlen(buffer));				
 		write(filedes,"\n",1);
@@ -471,8 +477,8 @@ public:
 			DFSnestedPrint(temp,filedes);
 			temp = temp -> nestedNext;	
 		}
-		if(tabCount != 0)
-			tabCount--;
+		if(dashCount != 0)
+			dashCount--;
 		
 	}
 
@@ -553,6 +559,7 @@ public:
 			sprintf(buffer,"%f\n",root->inclusiveTime);
 			write(filedes,buffer,strlen(buffer));
 			root->inclusiveTime = 0;
+			write(filedes,"\n",1);
 			return;
 		}
 		conciseHelper(timerObj,filedes);
@@ -584,7 +591,6 @@ public:
 		}		
 	}	
 	void DFSprint(timer_T* timerObj){//printing timing report using depth first search
-		static int tabCount = 0;
 		if(timerObj->nestedHead == NULL){
 			printHelper(timerObj,tabCount);		
 			return;				
