@@ -600,6 +600,7 @@ public:
 		if(timerObj == root){
 			cout << "***************" <<endl;
 			cout << "Total time taken: " << root -> inclusiveTime << endl;
+			root -> inclusiveTime = 0;
 			return;
 		}
 		if(tabCount != 0)

@@ -29,7 +29,7 @@ using namespace std;
 
 enum timer_option_t {OPENMP_TIMER = 1, CLOCK_TIMER = 2};
 
-timer_option_t choice;
+static timer_option_t choice;
 
 
 template<typename real_type>
