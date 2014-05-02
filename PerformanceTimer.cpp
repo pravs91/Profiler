@@ -95,10 +95,11 @@ typedef struct compare{
 class Profiler
 {
 public:
-	int numberOfTimers, fd;
+	int numberOfTimers;// fd;
 	double totalTime;
 	std::map<string,timer_T> timers;
 	std::map<string,compare> reference;
+	std::map<string,int> fileMap;
 	timer_T* root;
 	bool debug;
 	bool refFlag;
@@ -110,7 +111,6 @@ public:
 		numberOfTimers = 0;
 		debug = true;
 		totalTime = 0;
-		fd = -10;
 		refFlag = false;
 		dashCount = -1;
 		tabCount = 0;
@@ -121,7 +121,6 @@ public:
 		numberOfTimers = 0;
 		debug = true;
 		totalTime = 0;
-		fd = -10;
 		refFlag = false;
 		dashCount = -1;
 		tabCount = 0;
@@ -293,18 +292,36 @@ public:
 	}
 
 	void setFlop(string timerName,double f){//set flop count
-		timers[timerName].flop = f;
-		timers[timerName].calcFlops = true;
-		if(timers[timerName].time_in_sec != 0)
-			timers[timerName].computeFlops();
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		if(timerIter != timers.end()){//timer already exists
+			timers[timerName].flop = f;
+			timers[timerName].calcFlops = true;
+			if(timers[timerName].time_in_sec != 0)
+				timers[timerName].computeFlops();
+		}
+		else{
+			if(debug)
+				std::cout << "Undefined timer '" << timerName << "'" << endl;
+			return;
+		}
 	}
 
 	void setMemory(string timerName,double m){//set memory transfer count for BW calculation
-		timers[timerName].memOps = m;
-		timers[timerName].calcBW = true;
-		if(timers[timerName].time_in_sec != 0)
-			timers[timerName].computeBW();
-	}
+		std::map<string,timer_T>::iterator timerIter;
+		timerIter = timers.find(timerName);
+		if(timerIter != timers.end()){//timer already exists
+			timers[timerName].memOps = m;
+			timers[timerName].calcBW = true;
+			if(timers[timerName].time_in_sec != 0)
+				timers[timerName].computeBW();
+		}
+		else{
+			if(debug)
+				std::cout << "Undefined timer '" << timerName << "'" << endl;
+			return;
+		}		
+	}	
 	void dottedLine(int count,int fd){
 		int i;
 		for(i=0;i<count;i++)
@@ -345,7 +362,7 @@ public:
 		
 		if(timerIter != timers.end()){
 			DFSconcise(&timerIter->second,std);
-			write(fd,"\n",1);
+			write(std,"\n",1);
 		}
 		else{
 			if(debug)
@@ -355,12 +372,17 @@ public:
 
 	void printConcise(string timerName,string file){//print concise report
 		const char *fileName = file.c_str();
+		int fd;
+		std::map<string,int>::iterator fileIter;
+		fileIter = fileMap.find(file);
+
 		if(file.compare("STDOUT")==0){
 			printConciseStdOut(timerName);
 			return;
 		}
 		else{
-			if(fd < 0 || fd == 1){//create file if file doesn't exist
+			if(fileIter == fileMap.end()){//file does not exist in file hash, so open / create & truncate
+				fileMap[file] = 1;
 				fd = open(fileName,O_CREAT | O_RDWR | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 			}
 			else //open file in append mode
@@ -410,7 +432,7 @@ public:
 		
 		if(timerIter != timers.end()){
 			DFSnestedPrint(&timerIter->second,std);
-			write(fd,"\n",1);
+			write(std,"\n",1);
 		}
 		else{
 			if(debug)
@@ -419,12 +441,17 @@ public:
 	}
 	void printNestedTimers(string timerName,string file){//function to print nested timers to file.
 		const char *fileName = file.c_str();
+		int fd;
+		std::map<string,int>::iterator fileIter;
+		fileIter = fileMap.find(file);
+
 		if(file.compare("STDOUT")==0){
 			printNestedStdout(timerName);
 			return;
 		}
 		else{
-			if(fd < 0 || fd == 1){//create file if file doesn't exist
+			if(fileIter == fileMap.end()){//file does not exist in file hash, so open / create & truncate
+				fileMap[file] = 1;
 				fd = open(fileName,O_CREAT | O_RDWR | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 			}
 			else //open file in append mode
@@ -691,7 +718,6 @@ public:
 	}
 
 	void comparisonReport(string timerName,string newFile,string refFile){//generate comparison report
-		fd = -10;
 		refFlag = true;
 		const char* refName = refFile.c_str();
 		readReference(refName);
